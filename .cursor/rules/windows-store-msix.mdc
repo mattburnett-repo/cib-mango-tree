@@ -1,0 +1,25 @@
+---
+description: Windows App Store / MSIX packaging work for this project
+globs: "**/*msix*,**/*AppxManifest*,**/windows-store*"
+alwaysApply: false
+---
+
+# Windows Store / MSIX
+
+Goal: MSIX (or msixbundle) from the existing Windows PyInstaller build, then Partner Center submit.
+
+## Current baseline
+
+- CI already builds Windows exe via `build_gui.yml`
+- Release ships zip only — extend CI; do not replace zip for GitHub Releases
+
+## Approach
+
+1. Keep PyInstaller onedir
+2. Wrap with MakeAppx / MSIX tooling in CI
+3. Manifest identity must match Partner Center (Publisher, Name, Version)
+4. Secrets only in GitHub org secrets after Partner Center access exists
+
+## Research
+
+Use `microsoft-learn` MCP and project skill `.cursor/skills/windows-store-msix/SKILL.md`. Local notes may live in `mjb_notes/` (gitignored).
