@@ -23,6 +23,21 @@
         "--transport",
         "stdio"
       ]
+    },
+    "a11y-expert": {
+      "command": "uvx",
+      "args": [
+        "--with",
+        "fastmcp",
+        "a11y-expert-mcp"
+      ]
+    },
+    "a11y": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "a11y-mcp"
+      ]
     }
   }
 }
