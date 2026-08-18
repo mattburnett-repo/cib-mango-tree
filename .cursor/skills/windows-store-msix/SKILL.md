@@ -4,6 +4,10 @@ description: >-
   Plan and implement MSIX packaging and Microsoft Store submission for the
   existing Windows PyInstaller GUI build. Use when working on MSIX, AppxManifest,
   Partner Center, Windows Store, MakeAppx, or Store CI packaging.
+audience: cursor-agent
+note: >-
+  Cursor agent playbook only. Not read by Windows, MakeAppx, or GitHub Actions.
+  Packaging lives in packaging/msix/ and .github/workflows/build_gui.yml.
 ---
 
 # Windows Store / MSIX
@@ -15,8 +19,9 @@ Ship a Store-ready MSIX (or msixbundle) built from the current Windows PyInstall
 ## Repo facts
 
 - Windows build: `.github/workflows/build_gui.yml` matrix entry `Windows` / `windows-2022`
-- Artifact today: onedir under `dist/CIBMangoTree` → zipped as `CIBMangoTree_windows`
-- No MSIX / Store upload automation exists yet
+- Artifact today: onedir under `dist/CIBMangoTree` → zip `CIBMangoTree_windows` and MSIX `CIBMangoTree_windows_msix`
+- MSIX pack: `packaging/msix/AppxManifest.xml` + `MakeAppx` in `build_gui.yml` (Windows only)
+- Store upload / Partner Center automation is not implemented yet
 - macOS already has signing/notarization patterns for secrets — mirror the secrets approach, not the Apple tooling
 
 ## Phased workflow

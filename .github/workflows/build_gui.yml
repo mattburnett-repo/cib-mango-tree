@@ -60,6 +60,8 @@ jobs:
 
     name: ${{ matrix.platform_name }}
     runs-on: ${{ matrix.os }}
+    env:
+      artifact_path: ""
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -129,6 +131,51 @@ jobs:
       - name: Test executable with --noop
         run: ${{ matrix.check_command }}
 
+      - name: Package MSIX
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $pyproject = Get-Content pyproject.toml -Raw
+          if ($pyproject -notmatch '(?m)^version = "([^"]+)"') {
+            throw "Could not read version from pyproject.toml"
+          }
+          $parts = $Matches[1].TrimStart("v").Split(".")
+          while ($parts.Count -lt 4) { $parts += "0" }
+          $msixVersion = ($parts[0..3] -join ".")
+          Write-Host "MSIX Identity Version: $msixVersion"
+
+          $root = (Get-Location).Path
+          $packRoot = Join-Path $root "msix_payload"
+          if (Test-Path $packRoot) { Remove-Item $packRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $packRoot | Out-Null
+          Copy-Item -Path (Join-Path $root "dist\CIBMangoTree\*") -Destination $packRoot -Recurse
+          Copy-Item -Path (Join-Path $root "packaging\msix\AppxManifest.xml") -Destination (Join-Path $packRoot "AppxManifest.xml")
+          Copy-Item -Path (Join-Path $root "packaging\msix\Assets") -Destination (Join-Path $packRoot "Assets") -Recurse
+
+          $manifestPath = Join-Path $packRoot "AppxManifest.xml"
+          $manifest = [System.IO.File]::ReadAllText($manifestPath)
+          $manifest = $manifest -replace 'Version="0\.0\.0\.0"', "Version=`"$msixVersion`""
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllText($manifestPath, $manifest, $utf8NoBom)
+
+          $makeappx = @(
+            Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe" -ErrorAction SilentlyContinue
+            Get-Item "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\makeappx.exe" -ErrorAction SilentlyContinue
+          ) | Where-Object { $_ -ne $null } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $makeappx) {
+            throw "MakeAppx.exe not found. Install the Windows SDK on this runner."
+          }
+          Write-Host "Using $($makeappx.FullName)"
+
+          $msixPath = Join-Path $root "dist\${{ matrix.artifact_name }}.msix"
+          & $makeappx.FullName pack /d $packRoot /p $msixPath /o /v
+          if ($LASTEXITCODE -ne 0) {
+            throw "MakeAppx pack failed with exit code $LASTEXITCODE"
+          }
+          Get-Item $msixPath | Format-List Name, Length, FullName
+
       - name: Clean up redundant onedir folder
         if: runner.os == 'macOS'
         shell: bash
@@ -190,3 +237,10 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ env.artifact_path }}
+
+      - name: Upload MSIX artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact_name }}_msix
+          path: dist/${{ matrix.artifact_name }}.msix
