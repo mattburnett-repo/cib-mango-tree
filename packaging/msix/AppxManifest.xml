@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Placeholder identity for CI packaging.
-  Store identity is applied by .github/workflows/build_gui.yml at pack time.
-  Version is also stamped by .github/workflows/build_gui.yml at pack time.
+  Microsoft Store identity for CIB Mango Tree.
+  Version is stamped by .github/workflows/build_gui.yml at pack time.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -11,13 +10,13 @@
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   IgnorableNamespaces="uap uap10 rescap">
   <Identity
-    Name="CivicTechDC.CIBMangoTree"
+    Name="AlternativeNewsweeklyFoun.CIBMangoTree"
     Version="0.0.0.0"
-    Publisher="CN=CivicTechDC"
+    Publisher="CN=C14B7C4E-669C-42C0-8DC2-159FACF8C396"
     ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>CIB Mango Tree</DisplayName>
-    <PublisherDisplayName>Civic Tech DC</PublisherDisplayName>
+    <PublisherDisplayName>Alternative Newsweekly Foundation</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
   <Resources>
