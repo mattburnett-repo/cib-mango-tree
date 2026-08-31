@@ -267,6 +267,7 @@ class Storage:
             extension=extension,
             spec=spec,
             export_chunk_size=export_chunk_size,
+            denormalize_source_path=self._denormalize_source_path(analysis, spec),
         )
 
     def export_project_secondary_output(
@@ -293,7 +294,45 @@ class Storage:
             extension=extension,
             spec=spec,
             export_chunk_size=export_chunk_size,
+            denormalize_source_path=self._denormalize_source_path(analysis, spec),
         )
+
+    def _denormalize_source_path(
+        self, analysis: AnalysisModel, spec: AnalyzerOutput
+    ) -> Optional[str]:
+        """Path to the parquet holding an output's omitted columns, if it declares any."""
+        if spec.denormalize is None:
+            return None
+        return self.get_primary_output_parquet_path(
+            analysis, spec.denormalize.source_output
+        )
+
+    @staticmethod
+    def _denormalize(
+        df: pl.LazyFrame, spec: AnalyzerOutput, source_path: Optional[str]
+    ) -> pl.LazyFrame:
+        """
+        Re-attach columns the output omitted from its parquet file.
+
+        Left join so rows survive even if a key is somehow missing from the source.
+        """
+        denormalize = spec.denormalize
+        if denormalize is None or source_path is None:
+            return df
+
+        present = df.collect_schema().names()
+        missing = [c for c in denormalize.columns if c not in present]
+        if not missing:
+            # Already denormalized (e.g. an output written before the column was omitted).
+            return df
+
+        source = pl.scan_parquet(source_path).select([denormalize.join_on, *missing])
+        joined = df.join(source, on=denormalize.join_on, how="left")
+
+        if denormalize.insert_after is None or denormalize.insert_after not in present:
+            return joined
+        at = present.index(denormalize.insert_after) + 1
+        return joined.select([*present[:at], *missing, *present[at:]])
 
     def _export_output(
         self,
@@ -303,6 +342,7 @@ class Storage:
         extension: SupportedOutputExtension,
         spec: AnalyzerOutput,
         export_chunk_size: Optional[int] = None,
+        denormalize_source_path: Optional[str] = None,
     ):
         with pq.ParquetFile(input_path) as reader:
             num_chunks = (
@@ -312,7 +352,9 @@ class Storage:
             )
 
         if num_chunks == 1:
-            df = pl.scan_parquet(input_path)
+            df = self._denormalize(
+                pl.scan_parquet(input_path), spec, denormalize_source_path
+            )
             self._save_output(output_path, spec.transform_output(df), extension)
             return f"{output_path}.{extension}"
 
@@ -325,6 +367,9 @@ class Storage:
             for chunk_id, chunk in enumerate(
                 collect_dataframe_chunks(get_batches, export_chunk_size)
             ):
+                chunk = self._denormalize(
+                    chunk.lazy(), spec, denormalize_source_path
+                ).collect()
                 chunk = spec.transform_output(chunk)
                 self._save_output(f"{output_path}_{chunk_id}", chunk, extension)
                 yield chunk_id / num_chunks

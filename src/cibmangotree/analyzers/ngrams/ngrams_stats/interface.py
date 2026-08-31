@@ -1,18 +1,21 @@
 from cibmangotree.analyzer_interface import (
     AnalyzerOutput,
     OutputColumn,
+    OutputDeNormalization,
     SecondaryAnalyzerInterface,
 )
 
 from ..ngrams_base import interface as ngrams_interface
 from ..ngrams_base.interface import (
     COL_AUTHOR_ID,
+    COL_MESSAGE_ID,
     COL_MESSAGE_SURROGATE_ID,
     COL_MESSAGE_TEXT,
     COL_MESSAGE_TIMESTAMP,
     COL_NGRAM_ID,
     COL_NGRAM_LENGTH,
     COL_NGRAM_WORDS,
+    OUTPUT_MESSAGE,
 )
 
 COL_NGRAM_TOTAL_REPS = "total_reps"
@@ -96,6 +99,16 @@ interface = SecondaryAnalyzerInterface(
                     human_readable_name="timestamp",
                 ),
             ],
+            # we don't store message_text in the output, since it duplicates
+            # existing data and accounts for the vast majority of file size on
+            # corpuses with long messages. Instead, we store COL_MESSAGE_ID
+            # and re-join only when necessary
+            denormalize=OutputDeNormalization(
+                source_output=OUTPUT_MESSAGE,
+                join_on=COL_MESSAGE_SURROGATE_ID,
+                columns=[COL_MESSAGE_TEXT],
+                insert_after=COL_MESSAGE_ID,
+            ),
         ),
     ],
 )

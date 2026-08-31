@@ -81,6 +81,22 @@ class BaseDashboardPage(GuiPage, abc.ABC):
         except Exception:
             return None
 
+    def get_primary_output_parquet_path(self, output_id: str) -> str | None:
+        """
+        Get path to a *primary* output parquet file for the current analysis.
+
+        Dashboards need this to look up columns that a secondary output deliberately
+        omits to keep its own file small (see `OutputDeNormalization`).
+        """
+        analysis = self.session.current_analysis
+        if analysis is None:
+            return None
+        storage = self.session.app.context.storage
+        try:
+            return storage.get_primary_output_parquet_path(analysis, output_id)
+        except Exception:
+            return None
+
     async def load_parquet_async(
         self,
         output_id: str,

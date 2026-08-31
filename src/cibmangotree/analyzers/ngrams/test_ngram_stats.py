@@ -3,9 +3,12 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from cibmangotree.storage import Storage
 from cibmangotree.testing import ParquetTestData, test_secondary_analyzer
 
 from .ngrams_base.interface import (
+    COL_MESSAGE_SURROGATE_ID,
+    COL_MESSAGE_TEXT,
     OUTPUT_MESSAGE,
     OUTPUT_MESSAGE_NGRAMS,
     OUTPUT_NGRAM_DEFS,
@@ -99,3 +102,59 @@ def test_ngram_stats():
             ),
         },
     )
+
+
+def test_ngram_full_omits_message_text():
+    """The full report must not carry post text; it is re-joined on export."""
+    df = pl.read_parquet(Path(test_data_dir, OUTPUT_NGRAM_FULL + ".parquet"))
+    assert COL_MESSAGE_TEXT not in df.columns
+    assert (
+        COL_MESSAGE_SURROGATE_ID in df.columns
+    ), "join key for denormalization is missing"
+
+
+def test_ngram_full_denormalizes_message_text_for_export():
+    """
+    Exporting the full report must restore post text, in its declared position, with
+    the value belonging to each row's message.
+    """
+    spec = next(o for o in interface.outputs if o.id == OUTPUT_NGRAM_FULL)
+    assert spec.denormalize is not None, "ngram_full should declare its omitted columns"
+
+    narrow = pl.scan_parquet(Path(test_data_dir, OUTPUT_NGRAM_FULL + ".parquet"))
+    source_path = str(Path(test_data_dir, OUTPUT_MESSAGE + ".parquet"))
+    denormalized = Storage._denormalize(narrow, spec, source_path).collect()
+
+    assert COL_MESSAGE_TEXT in denormalized.columns
+    assert (
+        denormalized.height == narrow.collect().height
+    ), "denormalization must not change row count"
+
+    # placed immediately after the column it is declared to follow
+    cols = denormalized.columns
+    assert cols.index(COL_MESSAGE_TEXT) == cols.index(spec.denormalize.insert_after) + 1
+
+    # every row carries the text of its own message
+    messages = pl.read_parquet(source_path).select(
+        COL_MESSAGE_SURROGATE_ID, COL_MESSAGE_TEXT
+    )
+    expected = denormalized.select(COL_MESSAGE_SURROGATE_ID).join(
+        messages, on=COL_MESSAGE_SURROGATE_ID, how="left"
+    )
+    assert (
+        denormalized[COL_MESSAGE_TEXT].to_list() == expected[COL_MESSAGE_TEXT].to_list()
+    )
+
+
+def test_denormalization_is_idempotent_and_degrades_safely():
+    """Denormalizing an already-wide frame, or with no source available, is a no-op."""
+    spec = next(o for o in interface.outputs if o.id == OUTPUT_NGRAM_FULL)
+    narrow = pl.scan_parquet(Path(test_data_dir, OUTPUT_NGRAM_FULL + ".parquet"))
+    source_path = str(Path(test_data_dir, OUTPUT_MESSAGE + ".parquet"))
+
+    denormalized = Storage._denormalize(narrow, spec, source_path).collect()
+    again = Storage._denormalize(denormalized.lazy(), spec, source_path).collect()
+    assert again.equals(denormalized)
+
+    # a missing source must leave the frame untouched rather than raise
+    assert Storage._denormalize(narrow, spec, None).collect().equals(narrow.collect())

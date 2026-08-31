@@ -82,6 +82,32 @@ class AnalyzerParam(BaseModel):
         return self.human_readable_name or self.id
 
 
+class OutputDeNormalization(BaseModel):
+    """
+    Declares columns that an output deliberately omits from its parquet file and
+    re-joins only when the output is exported. This helps us to avoid massively
+    duplicating data in memory.
+
+    Use this when a column is large, repetitive, and already stored elsewhere.
+    This keeps the working file small while the final export remains unchanged
+    """
+
+    source_output: str
+    """The id of the *primary* analyzer output holding the omitted columns."""
+
+    join_on: str
+    """Column present in both this output and the source, used as the join key."""
+
+    columns: list[str]
+    """Columns to re-attach from the source output."""
+
+    insert_after: Optional[str] = None
+    """
+  Column to place the re-attached columns after, so the exported column order
+  matches what it was before the columns were omitted. Appends when None.
+  """
+
+
 class AnalyzerOutput(BaseModel):
     id: str
     """
@@ -97,6 +123,12 @@ class AnalyzerOutput(BaseModel):
     columns: list["OutputColumn"]
 
     internal: bool = False
+
+    denormalize: Optional[OutputDeNormalization] = None
+    """
+  Optional: columns omitted from the parquet on disk and re-joined at export time.
+  See `OutputDeNormalization`.
+  """
 
     def get_column_by_name(self, name: str):
         for column in self.columns:
