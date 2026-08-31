@@ -12,6 +12,7 @@ from .interface import (
     DataType,
     InputColumn,
     OutputColumn,
+    OutputDeNormalization,
     SecondaryAnalyzerInterface,
     backfill_param_values,
 )

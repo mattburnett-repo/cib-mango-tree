@@ -9,6 +9,11 @@ a point filters the data grid to show all occurrences of that n-gram.
 import polars as pl
 from nicegui import run, ui
 
+from cibmangotree.analyzers.ngrams.ngrams_base.interface import (
+    COL_MESSAGE_SURROGATE_ID,
+    COL_MESSAGE_TEXT,
+    OUTPUT_MESSAGE,
+)
 from cibmangotree.analyzers.ngrams.ngrams_stats.interface import (
     COL_NGRAM_WORDS,
     OUTPUT_NGRAM_FULL,
@@ -22,6 +27,10 @@ from cibmangotree.gui.session import GuiSession
 from ..base_dashboard import BaseDashboardPage
 from .data import filter_ngrams_by_text, make_detail_columns, make_summary_columns
 from .plots import SamplingMetadata, plot_scatter_echart, sample_ngram_data
+
+# Number of suggestions to match server-side and send to the browser
+MAX_AUTOCOMPLETE_OPTIONS = 50
+MIN_AUTOCOMPLETE_CHARS = 2
 
 
 class NgramsDashboardPage(BaseDashboardPage):
@@ -53,6 +62,7 @@ class NgramsDashboardPage(BaseDashboardPage):
 
         self._df_stats: pl.DataFrame | None = None
         self._df_full: pl.DataFrame | None = None
+        self._messages_path: str | None = None
         self._df_stats_sampled: pl.DataFrame | None = None
         self._sampling_metadata: SamplingMetadata | None = None
 
@@ -80,9 +90,38 @@ class NgramsDashboardPage(BaseDashboardPage):
         if self._df_full is None or self._df_full.is_empty():
             return pl.DataFrame()
 
-        return self._df_full.filter(pl.col(COL_NGRAM_WORDS) == words).pipe(
-            make_detail_columns
-        )
+        rows = self._df_full.filter(pl.col(COL_NGRAM_WORDS) == words)
+        return self._attach_message_text(rows).pipe(make_detail_columns)
+
+    def _attach_message_text(self, rows: pl.DataFrame) -> pl.DataFrame:
+        """
+        Look up post text for the rows being displayed.
+
+        The full report omits message_text so it is fetched here for just the
+        selected n-gram's rows rather than being held in memory for the whole
+        corpus.
+        """
+        if COL_MESSAGE_TEXT in rows.columns or self._messages_path is None:
+            return rows
+        if rows.is_empty():
+            return rows.with_columns(
+                pl.lit(None, dtype=pl.String).alias(COL_MESSAGE_TEXT)
+            )
+
+        wanted = rows[COL_MESSAGE_SURROGATE_ID].unique()
+        try:
+            texts = (
+                pl.scan_parquet(self._messages_path)
+                .select(COL_MESSAGE_SURROGATE_ID, COL_MESSAGE_TEXT)
+                .filter(pl.col(COL_MESSAGE_SURROGATE_ID).is_in(wanted))
+                .collect()
+            )
+        except Exception:
+            return rows.with_columns(
+                pl.lit(None, dtype=pl.String).alias(COL_MESSAGE_TEXT)
+            )
+
+        return rows.join(texts, on=COL_MESSAGE_SURROGATE_ID, how="left")
 
     def _update_info_label(self) -> None:
         if self._info_label is None:
@@ -199,7 +238,41 @@ class NgramsDashboardPage(BaseDashboardPage):
     def _handle_filter_change(self, e) -> None:
         self._filter_text = e.value if e.value else None
         self._filter_applied = False
+        self._refresh_autocomplete()
         self._update_info_label()
+
+    def _refresh_autocomplete(self) -> None:
+        """
+        Offer suggestions for what the user has typed so far.
+
+        Matches internally to avoid handing the websocket too much information
+        and sabotaging the connection
+        """
+        if self._ngram_select is None:
+            return
+
+        text = (self._filter_text or "").strip()
+        if self._df_stats is None or len(text) < MIN_AUTOCOMPLETE_CHARS:
+            self._all_ngram_options = []
+            self._ngram_select.set_autocomplete([])
+            return
+
+        try:
+            matches = (
+                filter_ngrams_by_text(self._df_stats, text)
+                .select(COL_NGRAM_WORDS)
+                .unique()
+                .sort(COL_NGRAM_WORDS)
+                .head(MAX_AUTOCOMPLETE_OPTIONS)
+                .to_series()
+                .to_list()
+            )
+        except Exception:
+            # A partially typed value can be an invalid regex, offer nothing
+            matches = []
+
+        self._all_ngram_options = matches
+        self._ngram_select.set_autocomplete(matches)
 
     def _handle_enter_press(self, e) -> None:
         self._selected_words = None
@@ -235,6 +308,7 @@ class NgramsDashboardPage(BaseDashboardPage):
         self._selected_data_index = None
         self._clear_all_highlights()
 
+        self._refresh_autocomplete()
         self._update_chart_with_filter()
         self._update_grid()
         self._update_info_label()
@@ -242,6 +316,7 @@ class NgramsDashboardPage(BaseDashboardPage):
     async def _load_and_render_async(self) -> None:
         stats_path = self.get_output_parquet_path(OUTPUT_NGRAM_STATS)
         full_path = self.get_output_parquet_path(OUTPUT_NGRAM_FULL)
+        self._messages_path = self.get_primary_output_parquet_path(OUTPUT_MESSAGE)
 
         if stats_path is None:
             if self._chart_loading is not None:
@@ -282,14 +357,8 @@ class NgramsDashboardPage(BaseDashboardPage):
                 self._show_error(self._chart_loading, f"Could not build chart: {exc}")
             return
 
-        if self._ngram_select is not None:
-            self._all_ngram_options = (
-                self._df_stats.select(pl.col(COL_NGRAM_WORDS).unique())
-                .sort(COL_NGRAM_WORDS)
-                .to_series()
-                .to_list()
-            )
-            self._ngram_select.set_autocomplete(self._all_ngram_options)
+        # suggestions computed per keystroke in _handle_filter_change
+        self._refresh_autocomplete()
 
         if (
             self._chart is None
