@@ -21,7 +21,7 @@ Ship a Store-ready MSIX (or msixbundle) built from the current Windows PyInstall
 - Windows build: `.github/workflows/build_gui.yml` matrix entry `Windows` / `windows-2022`
 - Artifact today: onedir under `dist/CIBMangoTree` → zip `CIBMangoTree_windows` and MSIX `CIBMangoTree_windows_msix`
 - MSIX pack: `packaging/msix/AppxManifest.xml` + `MakeAppx` in `build_gui.yml` (Windows only)
-- Store upload / Partner Center automation is not implemented yet
+- Store upload from `release.yml` (`publish_msix` job) on stable tags
 - macOS already has signing/notarization patterns for secrets — mirror the secrets approach, not the Apple tooling
 
 ## Phased workflow
@@ -41,15 +41,16 @@ Ship a Store-ready MSIX (or msixbundle) built from the current Windows PyInstall
 
 ### Phase 2
 
-1. Implement CI MSIX production
-2. Manual Partner Center submit first; automate later if needed
+1. CI MSIX production — done (`build_gui.yml`)
+2. CI Store upload — done (`publish_msix` in `release.yml` on stable tags)
 3. Fix certification failures (capabilities, privacy URL, publisher mismatch, launch crashes)
 
 ## Done when
 
 - CI produces versioned MSIX/msixbundle
 - Package installs and launches on Windows
-- Listing submitted / published (or remediation list owned)
+- Stable tag releases upload to Partner Center via `publish_msix`
+- Listing published (or remediation list owned)
 
 ## Do not
 

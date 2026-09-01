@@ -10,8 +10,9 @@ Goal: MSIX (or msixbundle) from the existing Windows PyInstaller build, then Par
 
 ## Current baseline
 
-- CI already builds Windows exe via `build_gui.yml`
-- Release ships zip only — extend CI; do not replace zip for GitHub Releases
+- CI builds Windows zip + MSIX via `build_gui.yml`
+- Stable tag releases run `publish_msix` in `release.yml` (Partner Center upload via `msstore publish`)
+- Keep the GitHub Release zip; MSIX Store publish is additive
 
 ## Approach
 

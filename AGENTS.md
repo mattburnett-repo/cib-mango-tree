@@ -36,7 +36,7 @@ uv run pyinstaller pyinstaller.spec   # GUI bundle
 
 ## Packaging note
 
-Windows GitHub Releases currently ship a **zip** of the PyInstaller onedir plus an **MSIX** from the same Windows job (`packaging/msix/` + MakeAppx). Keep the zip. Partner Center submit is not automated yet. See `.cursor/skills/windows-store-msix/SKILL.md`.
+Windows GitHub Releases currently ship a **zip** of the PyInstaller onedir plus an **MSIX** from the same Windows job (`packaging/msix/` + MakeAppx). Keep the zip. Tagged stable releases also run `publish_msix` in `release.yml`. See `.cursor/skills/windows-store-msix/SKILL.md`.
 
 ## MCP (optional)
 
