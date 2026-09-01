@@ -95,6 +95,8 @@ jobs:
       !contains(github.ref_name, '-beta') &&
       !contains(github.ref_name, '-rc')
     runs-on: windows-latest
+    # Editor may warn "Context access might be invalid" for these — custom secrets/vars live in
+    # GitHub Settings, not this file. Safe to ignore if they are configured on the repo.
     env:
       AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
       SELLER_ID: ${{ secrets.SELLER_ID }}
